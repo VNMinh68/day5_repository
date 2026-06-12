@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inspection Checklist — Option C</title>
+<style>
+  body { font-family: monospace; background: #f5f5f5; padding: 24px; color: #222; }
+  .frame { border: 2px solid #888; background: #fff; max-width: 560px; padding: 16px; margin-bottom: 24px; }
+  h1 { font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 8px; }
+  table { border-collapse: collapse; width: 100%; }
+  th, td { border: 1px solid #aaa; padding: 6px 10px; font-size: 13px; text-align: left; }
+  th { background: #eee; }
+  input[type=text] { font-family: monospace; width: 160px; }
+  button { font-family: monospace; padding: 4px 14px; margin-top: 12px; cursor: pointer; }
+  .msg { font-size: 13px; margin-top: 10px; min-height: 18px; }
+  .msg.err { color: #b00020; }
+  .msg.ok { color: #0a7d2c; }
+  .overall-PASS { color: #0a7d2c; font-weight: bold; }
+  .overall-FAIL { color: #b00020; font-weight: bold; }
+</style>
+</head>
+<body>
+<div class="frame">
+  <h1>New Inspection</h1>
+  <p>
+    Inspector: <input type="text" id="inspector" placeholder="tran.thi.b"> &nbsp;
+    Lot No: <input type="text" id="lot_no" placeholder="LOT-0042">
+  </p>
+  <table>
+    <thead><tr><th>Item</th><th>Result</th></tr></thead>
+    <tbody id="items"><tr><td colspan="2">Loading items…</td></tr></tbody>
+  </table>
+  <button id="submit">Submit Inspection</button>
+  <div class="msg" id="submitMsg"></div>
+</div>
+
+<div class="frame">
+  <h1>History</h1>
+  <p>
+    Date: <input type="text" id="date" placeholder="2026-06-11">
+    <button id="search">Search</button>
+  </p>
+  <table>
+    <thead><tr><th>Time</th><th>Lot</th><th>Inspector</th><th>Overall</th></tr></thead>
+    <tbody id="history"><tr><td colspan="4">No search yet.</td></tr></tbody>
+  </table>
+  <div class="msg" id="historyMsg"></div>
+</div>
+
+<script>
+let CHECKLIST = [];
+
+async function loadItems() {
+  const tbody = document.getElementById('items');
+  try {
+    const res = await fetch('/checklist-items');
+    CHECKLIST = await res.json();
+    tbody.innerHTML = '';
+    for (const item of CHECKLIST) {
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + item.label + '</td>' +
+        '<td>' +
+          '<label><input type="radio" name="item-' + item.id + '" value="PASS"> Pass</label> ' +
+          '<label><input type="radio" name="item-' + item.id + '" value="FAIL"> Fail</label>' +
+        '</td>';
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="2">Failed to load checklist items.</td></tr>';
+  }
+}
+
+function collectResults() {
+  return CHECKLIST.map((item) => {
+    const checked = document.querySelector('input[name="item-' + item.id + '"]:checked');
+    return { item_id: item.id, result: checked ? checked.value : null };
+  });
+}
+
+async function submitInspection() {
+  const msg = document.getElementById('submitMsg');
+  msg.className = 'msg';
+  msg.textContent = '';
+
+  const results = collectResults();
+  if (results.some((r) => r.result === null)) {
+    msg.className = 'msg err';
+    msg.textContent = 'Every item must be answered before submitting.';
+    return;
+  }
+
+  const body = {
+    inspector: document.getElementById('inspector').value,
+    lot_no: document.getElementById('lot_no').value,
+    results,
+  };
+
+  try {
+    const res = await fetch('/inspections', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      msg.className = 'msg err';
+      msg.textContent = 'Error: ' + (data.error || res.status);
+      return;
+    }
+    msg.className = 'msg ok';
+    msg.innerHTML = 'Saved #' + data.id + ' — overall ' +
+      '<span class="overall-' + data.overall + '">' + data.overall + '</span>';
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Request failed.';
+  }
+}
+
+async function searchHistory() {
+  const msg = document.getElementById('historyMsg');
+  const tbody = document.getElementById('history');
+  msg.className = 'msg';
+  msg.textContent = '';
+
+  const date = document.getElementById('date').value;
+  try {
+    const res = await fetch('/inspections?date=' + encodeURIComponent(date));
+    const data = await res.json();
+    if (!res.ok) {
+      msg.className = 'msg err';
+      msg.textContent = 'Error: ' + (data.error || res.status);
+      return;
+    }
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4">No inspections for ' + date + '.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const row of data) {
+      const time = (row.inspected_at || '').slice(11, 16);
+      const tr = document.createElement('tr');
+      tr.innerHTML =
+        '<td>' + time + '</td>' +
+        '<td>' + row.lot_no + '</td>' +
+        '<td>' + row.inspector + '</td>' +
+        '<td class="overall-' + row.overall + '">' + row.overall + '</td>';
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    msg.className = 'msg err';
+    msg.textContent = 'Request failed.';
+  }
+}
+
+document.getElementById('submit').addEventListener('click', submitInspection);
+document.getElementById('search').addEventListener('click', searchHistory);
+loadItems();
+</script>
+</body>
+</html>

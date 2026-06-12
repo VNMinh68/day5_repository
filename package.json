@@ -1,0 +1,19 @@
+{
+  "name": "option-c-inspection-checklist",
+  "version": "1.0.0",
+  "description": "SPELIX Day 5 capstone — Option C: Inspection Checklist Form (Express + SQLite)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "jest --runInBand"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  }
+}
